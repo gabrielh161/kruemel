@@ -2,6 +2,8 @@
 // Reagiert auf laufende Claude-Code-Sessions (~/.claude/projects/*.jsonl),
 // Klick öffnet Chat über `claude -p` (Abo, kein API-Key). Animationen: Anim.swift
 import AppKit
+// Vorname des Mac-Nutzers, z. B. „Gabriel“ aus „Gabriel Höll“
+let userName = NSFullUserName().split(separator: " ").first.map(String.init) ?? NSUserName()
 import SwiftUI
 
 final class Pet: ObservableObject {
@@ -20,7 +22,7 @@ struct PetView: View {
 
 final class Chat: ObservableObject {
     @Published var input = ""
-    @Published var answer = "Hallo Gabriel, ich bin Krümel! Frag mich was."
+    @Published var answer = "Hallo \(userName), ich bin Krümel! Frag mich was."
     @Published var busy = false
     var hasConversation = false
 }
@@ -310,7 +312,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         chat.answer = "› \(q)\n\n…"
         lastInteraction = Date()
         let cont = chat.hasConversation
-        let system = "Du heißt Krümel und bist ein kleines orangefarbenes Pixel-Wesen am Bildschirmrand von Gabriel. Antworte kurz, freundlich, auf Deutsch, ohne Markdown. Du darfst Dateien im Schreibtisch-Ordner ~/Desktop lesen, verschieben, umbenennen und anlegen. Lösche nie etwas; zum Aufräumen in Ordner verschieben."
+        let system = "Du heißt Krümel und bist ein kleines orangefarbenes Pixel-Wesen am Bildschirmrand von \(userName). Antworte kurz, freundlich, auf Deutsch, ohne Markdown. Du darfst Dateien im Schreibtisch-Ordner ~/Desktop lesen, verschieben, umbenennen und anlegen. Lösche nie etwas; zum Aufräumen in Ordner verschieben."
         DispatchQueue.global().async { [workDir] in
             let p = Process()
             p.executableURL = URL(fileURLWithPath: "/bin/zsh")
