@@ -101,6 +101,8 @@ final class BubbleHost: NSHostingView<BubbleView> {
 }
 
 /// Letzte Aktion von Claude aus dem Ende eines Session-Transkripts: Text oder Werkzeug.
+let thinkingText = "Denkt nach …"
+
 func lastAction(_ file: URL) -> String? {
     guard let h = try? FileHandle(forReadingFrom: file) else { return nil }
     defer { try? h.close() }
@@ -108,6 +110,12 @@ func lastAction(_ file: URL) -> String? {
     try? h.seek(toOffset: size > 200_000 ? size - 200_000 : 0)
     guard let data = try? h.readToEnd(), let s = String(data: data, encoding: .utf8) else { return nil }
     for line in s.split(separator: "\n").reversed() {
+        // Neue Nachricht vom Nutzer nach der letzten Antwort → Claude denkt nach
+        if line.contains("\"type\":\"user\""), !line.contains("tool_result"), !line.contains("\"isMeta\":true"),
+           let o = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+           o["type"] as? String == "user", o["isSidechain"] as? Bool != true {
+            return thinkingText
+        }
         guard line.contains("\"type\":\"assistant\""),
               let o = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
               o["type"] as? String == "assistant", o["isSidechain"] as? Bool != true,
@@ -251,7 +259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if chat.busy { pet.f = thinkFrame(t); return }
         if now < happyUntil { pet.f = happyFrame(t); return }
-        if working && act == nil { targetX = nil; lastInteraction = now; pet.f = laptopFrame(t); return }
+        if working && act == nil { targetX = nil; lastInteraction = now; pet.f = status.text == thinkingText ? thinkFrame(t) : laptopFrame(t); return }
 
         if let a = act {
             pet.f = a.f(actT)
