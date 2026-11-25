@@ -29,11 +29,19 @@ final class Chat: ObservableObject {
 
 struct ChatView: View {
     @ObservedObject var chat: Chat
+    @ObservedObject var status: Status
     var send: () -> Void
     let accent = pal["#"]!
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if !status.text.isEmpty {
+                Text((status.done ? "✓ Claude fertig: " : "Claude: ") + status.text)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(accent)
+                    .lineLimit(2)
+                    .onTapGesture(perform: openClaude)
+            }
             ScrollView {
                 Text(chat.answer)
                     .font(.system(size: 12, design: .monospaced))
@@ -70,34 +78,10 @@ final class Status: ObservableObject {
     @Published var done = false
 }
 
-struct BubbleView: View {
-    @ObservedObject var s: Status
-    let accent = pal["#"]!
-    var body: some View {
-        VStack {
-            Spacer(minLength: 0)
-            Text((s.done ? "✓ Fertig: " : "") + s.text)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(.white.opacity(0.92))
-                .lineLimit(2)
-                .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color(red: 0.12, green: 0.11, blue: 0.10).opacity(0.94))
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(accent.opacity(s.done ? 0.9 : 0.45), lineWidth: 1))
-                )
-        }
-        .frame(width: 300, height: 56)
+func openClaude() {
+    if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.anthropic.claudefordesktop") {
+        NSWorkspace.shared.openApplication(at: url, configuration: .init())
     }
-}
-
-final class BubbleHost: NSHostingView<BubbleView> {
-    override func mouseUp(with event: NSEvent) {
-        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.anthropic.claudefordesktop") {
-            NSWorkspace.shared.openApplication(at: url, configuration: .init())
-        }
-    }
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
 /// Letzte Aktion von Claude aus dem Ende eines Session-Transkripts: Text oder Werkzeug.
@@ -158,8 +142,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let status = Status()
     var window: KeyPanel!
     var chatPanel: KeyPanel!
-    var bubble: KeyPanel!
-    var bubbleUntil = Date.distantPast
     var t = 0
     var act: Act?
     var actT = 0
@@ -189,9 +171,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.orderFrontRegardless()
 
         chatPanel = makePanel(NSRect(x: 0, y: 0, width: 320, height: 230))
-        chatPanel.contentView = NSHostingView(rootView: ChatView(chat: chat) { [weak self] in self?.ask() })
-        bubble = makePanel(NSRect(x: 0, y: 0, width: 300, height: 56))
-        bubble.contentView = BubbleHost(rootView: BubbleView(s: status))
+        chatPanel.contentView = NSHostingView(rootView: ChatView(chat: chat, status: status) { [weak self] in self?.ask() })
 
         Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] _ in self?.step() }
         Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.checkActivity() }
@@ -235,27 +215,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func updateBubble(working: Bool) {
-        let show = (working || Date() < bubbleUntil) && !status.text.isEmpty && !chatPanel.isVisible
-        if show {
-            let f = window.frame
-            bubble.setFrameOrigin(NSPoint(x: f.midX - 150, y: f.minY + CGFloat(gridH - bodyY) * px + 34))
-            if !bubble.isVisible { bubble.orderFrontRegardless() }
-        } else if bubble.isVisible { bubble.orderOut(nil) }
-    }
-
     func step() {
         t += 1
         let now = Date()
         let working = now.timeIntervalSince(lastActivity) < 6
         if wasWorking && !working && !chat.busy {
             happyUntil = now.addingTimeInterval(3)
-            bubbleUntil = now.addingTimeInterval(12)
             status.done = true
         }
         if working { status.done = false }
         wasWorking = working
-        updateBubble(working: working)
 
         if chat.busy { pet.f = thinkFrame(t); return }
         if now < happyUntil { pet.f = happyFrame(t); return }
